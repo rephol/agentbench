@@ -89,6 +89,7 @@ pub async fn run_attempt(
         start_ms,
         end_ms,
         agent_cost_usd: outcome.reported_cost_usd,
+        model_usage: outcome.model_usage,
     })
 }
 

@@ -1,0 +1,5 @@
+id = "22-editor-undo-redo"
+category = "fix"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """The undo/redo in `editor.py` / `history.py` is unreliable (edits leak into history, redo survives new edits, limits and compound edits misbehave). Rewrite the behaviour so the editor works exactly as the specification in the docstring of editor.py, fixing whichever of the two modules needs it. Standard library only."""

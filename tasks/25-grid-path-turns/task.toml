@@ -1,0 +1,5 @@
+id = "25-grid-path-turns"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement `best_path` in gridpath.py exactly as specified in its module docstring: a cheapest path on a grid with cell costs, turn costs, one-way arrow tiles and deterministic tie-breaking. Standard library only."""

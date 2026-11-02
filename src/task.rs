@@ -20,6 +20,9 @@ pub struct TaskMeta {
     pub category: String,
     pub difficulty: String,
     pub prompt: String,
+    /// Free-form labels, e.g. `hard-v2`; `agentbench run --tag` filters on them.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

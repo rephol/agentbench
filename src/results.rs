@@ -9,8 +9,30 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
+
+/// Tokens and cost for one model, as reported by claude's `modelUsage` or summed from
+/// tierline records.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ModelTokens {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_creation: u64,
+    pub cost_usd: f64,
+}
+
+impl ModelTokens {
+    pub fn add(&mut self, o: &ModelTokens) {
+        self.input += o.input;
+        self.output += o.output;
+        self.cache_read += o.cache_read;
+        self.cache_creation += o.cache_creation;
+        self.cost_usd += o.cost_usd;
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attempt {
@@ -28,6 +50,10 @@ pub struct Attempt {
     /// Cost the agent reported about itself (claude JSON output); fallback only.
     #[serde(default)]
     pub agent_cost_usd: Option<f64>,
+    /// Per-model usage claude reported about itself (`modelUsage`). Includes
+    /// server-side calls such as the advisor, which tierline never sees.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub model_usage: BTreeMap<String, ModelTokens>,
 }
 
 pub fn append(path: &Path, a: &Attempt) -> Result<()> {
@@ -63,6 +89,8 @@ pub fn read(path: &Path) -> Result<Vec<Attempt>> {
 pub struct TierlineRecord {
     pub ts_ms: u128,
     #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
     pub input_tokens: u64,
     #[serde(default)]
     pub output_tokens: u64,
@@ -95,6 +123,8 @@ pub struct Usage {
     pub cost_usd: f64,
     /// Requests in the window that tierline could not price (`cost_usd` null).
     pub unpriced: u64,
+    /// Per-model breakdown of the requests tierline saw (records without a model are skipped).
+    pub models: BTreeMap<String, ModelTokens>,
 }
 
 pub fn attribute(attempt: &Attempt, log: &[TierlineRecord]) -> Usage {
@@ -108,6 +138,15 @@ pub fn attribute(attempt: &Attempt, log: &[TierlineRecord]) -> Usage {
         u.output_tokens += r.output_tokens;
         u.cache_creation_tokens += r.cache_creation_tokens;
         u.cache_read_tokens += r.cache_read_tokens;
+        if let Some(m) = &r.model {
+            u.models.entry(m.clone()).or_default().add(&ModelTokens {
+                input: r.input_tokens,
+                output: r.output_tokens,
+                cache_read: r.cache_read_tokens,
+                cache_creation: r.cache_creation_tokens,
+                cost_usd: r.cost_usd.unwrap_or(0.0),
+            });
+        }
         match r.cost_usd {
             Some(c) => u.cost_usd += c,
             None => u.unpriced += 1,

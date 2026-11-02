@@ -1,6 +1,7 @@
 //! Agent adapters. `Claude` shells out to the `claude` CLI headlessly; the fakes
 //! exist so the harness can be tested without touching a model.
 
+use crate::results::ModelTokens;
 use crate::task::{clear_dir, copy_tree, Task};
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -36,6 +37,8 @@ pub struct AgentOutcome {
     pub timed_out: bool,
     /// Cost reported by the agent itself (claude's JSON `total_cost_usd`), if any.
     pub reported_cost_usd: Option<f64>,
+    /// Per-model usage from claude's JSON `modelUsage`.
+    pub model_usage: BTreeMap<String, ModelTokens>,
 }
 
 /// Tools the agent may use; everything else is denied.
@@ -72,6 +75,31 @@ pub fn claude_args(prompt: &str, model: Option<&str>) -> Vec<String> {
 pub fn parse_reported_cost(stdout: &str) -> Option<f64> {
     let v: serde_json::Value = serde_json::from_str(stdout.trim()).ok()?;
     v.get("total_cost_usd")?.as_f64()
+}
+
+/// Pulls `modelUsage` (per-model tokens and cost) out of claude's JSON stdout.
+pub fn parse_model_usage(stdout: &str) -> BTreeMap<String, ModelTokens> {
+    let mut out = BTreeMap::new();
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(stdout.trim()) else {
+        return out;
+    };
+    let Some(m) = v.get("modelUsage").and_then(|m| m.as_object()) else {
+        return out;
+    };
+    let n = |o: &serde_json::Value, k: &str| o.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+    for (name, u) in m {
+        out.insert(
+            name.clone(),
+            ModelTokens {
+                input: n(u, "inputTokens"),
+                output: n(u, "outputTokens"),
+                cache_read: n(u, "cacheReadInputTokens"),
+                cache_creation: n(u, "cacheCreationInputTokens"),
+                cost_usd: u.get("costUSD").and_then(|x| x.as_f64()).unwrap_or(0.0),
+            },
+        );
+    }
+    out
 }
 
 pub struct AgentSpec<'a> {
@@ -118,6 +146,7 @@ pub async fn run_agent(spec: &AgentSpec<'_>, task: &Task, workdir: &Path) -> Res
                         exit_code: out.status.code(),
                         timed_out: false,
                         reported_cost_usd: parse_reported_cost(&stdout),
+                        model_usage: parse_model_usage(&stdout),
                     })
                 }
                 // The dropped future kills the child (kill_on_drop).
@@ -125,6 +154,7 @@ pub async fn run_agent(spec: &AgentSpec<'_>, task: &Task, workdir: &Path) -> Res
                     exit_code: None,
                     timed_out: true,
                     reported_cost_usd: None,
+                    model_usage: BTreeMap::new(),
                 }),
             }
         }

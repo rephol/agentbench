@@ -39,6 +39,9 @@ enum Cmd {
         /// Comma-separated task ids (default: all).
         #[arg(long, value_delimiter = ',')]
         tasks: Vec<String>,
+        /// Only tasks carrying this tag in task.toml (e.g. hard-v2).
+        #[arg(long)]
+        tag: Option<String>,
         #[arg(long)]
         samples: Option<u32>,
         /// claude | fake-solve | fake-noop
@@ -111,6 +114,7 @@ async fn main() -> Result<()> {
             config,
             arms,
             tasks,
+            tag,
             samples,
             agent,
             out,
@@ -121,6 +125,9 @@ async fn main() -> Result<()> {
             let kind =
                 AgentKind::parse(&agent).with_context(|| format!("unknown agent {agent:?}"))?;
             let mut all = load_tasks(&base.join(&cfg.run.tasks_dir))?;
+            if let Some(tag) = &tag {
+                all.retain(|t| t.meta.tags.iter().any(|x| x == tag));
+            }
             if !tasks.is_empty() {
                 all.retain(|t| tasks.iter().any(|id| id == t.id()));
             }

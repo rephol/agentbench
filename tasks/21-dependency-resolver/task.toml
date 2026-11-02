@@ -1,0 +1,5 @@
+id = "21-dependency-resolver"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement `resolve(requirements, index)` in resolver.py exactly as its module docstring specifies (a small dependency resolver with version constraints, backtracking and a deterministic choice rule). Standard library only."""

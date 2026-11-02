@@ -1,0 +1,5 @@
+id = "20-layered-config"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """The `configkit` package (merge.py, env.py, loader.py) is a skeleton. Implement `merge`, `env_overrides` and `load` exactly as their docstrings specify, including the None-deletes rule, type coercion from the defaults schema, no aliasing between inputs and results, and per-leaf provenance. Standard library only."""

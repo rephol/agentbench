@@ -1,7 +1,7 @@
 //! Per-arm summary, markdown table and SVG chart.
 
 use crate::config::Config;
-use crate::results::{attribute, read_tierline, Attempt, Usage};
+use crate::results::{attribute, read_tierline, Attempt, ModelTokens, Usage};
 use crate::stats::bootstrap_ci;
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -24,6 +24,16 @@ pub struct ArmSummary {
     /// Requests tierline could not price plus attempts with no matching traffic.
     pub cost_gaps: u64,
     pub mean_duration_s: f64,
+    /// Sum of claude's own `total_cost_usd` over attempts that reported one.
+    pub claude_cost_usd: Option<f64>,
+    pub claude_cost_per_success: Option<f64>,
+    /// Per-model usage summed from claude's `modelUsage`.
+    pub claude_models: BTreeMap<String, ModelTokens>,
+    /// Per-model usage summed from tierline records (empty without a tierline log).
+    pub tierline_models: BTreeMap<String, ModelTokens>,
+    /// Models claude reported that tierline never saw: server-side calls such as the advisor.
+    /// Only computed when both sources exist.
+    pub unseen_by_tierline: Vec<String>,
 }
 
 /// `usages`, when given, is parallel to `attempts` (tierline-attributed).
@@ -74,7 +84,39 @@ pub fn summarize_arm(
     } else {
         attempts.iter().map(|a| a.duration_ms as f64).sum::<f64>() / attempts.len() as f64 / 1000.0
     };
+    let reported: Vec<f64> = attempts.iter().filter_map(|a| a.agent_cost_usd).collect();
+    let claude_cost_usd = (!reported.is_empty()).then(|| reported.iter().sum::<f64>());
+    let claude_cost_per_success = match (claude_cost_usd, successes) {
+        (Some(c), n) if n > 0 => Some(c / n as f64),
+        _ => None,
+    };
+    let mut claude_models: BTreeMap<String, ModelTokens> = BTreeMap::new();
+    for a in attempts {
+        for (m, t) in &a.model_usage {
+            claude_models.entry(m.clone()).or_default().add(t);
+        }
+    }
+    let mut tierline_models: BTreeMap<String, ModelTokens> = BTreeMap::new();
+    for u in usages.unwrap_or(&[]) {
+        for (m, t) in &u.models {
+            tierline_models.entry(m.clone()).or_default().add(t);
+        }
+    }
+    let unseen_by_tierline = if usages.is_some() {
+        claude_models
+            .keys()
+            .filter(|m| !tierline_models.contains_key(*m))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
     ArmSummary {
+        claude_cost_usd,
+        claude_cost_per_success,
+        claude_models,
+        tierline_models,
+        unseen_by_tierline,
         arm: arm.to_string(),
         attempts: attempts.len(),
         successes,
@@ -127,6 +169,21 @@ fn usd(v: Option<f64>) -> String {
     v.map_or("n/a".into(), |c| format!("${c:.4}"))
 }
 
+fn models_cell(m: &BTreeMap<String, ModelTokens>) -> String {
+    if m.is_empty() {
+        return "n/a".into();
+    }
+    m.iter()
+        .map(|(k, t)| {
+            format!(
+                "{} (in {} / out {} / cache-r {} / cache-w {})",
+                k, t.input, t.output, t.cache_read, t.cache_creation
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("<br>")
+}
+
 pub fn markdown(rows: &[ArmSummary], resamples: usize) -> String {
     let mut s = String::from(
         "| arm | tasks | attempts | success rate | 95% CI | total cost | cost / success | cost source | mean time |\n\
@@ -153,6 +210,28 @@ pub fn markdown(rows: &[ArmSummary], resamples: usize) -> String {
             r.cost_source,
             gaps,
             r.mean_duration_s
+        );
+    }
+    s += "\n| arm | tierline cost / success | claude-reported cost | claude-reported cost / success | claude per-model tokens | tierline per-model tokens | server-side models (claude only) |\n|---|---|---|---|---|---|---|\n";
+    for r in rows {
+        let unseen = if r.unseen_by_tierline.is_empty() {
+            "none".to_string()
+        } else {
+            format!("**{}**", r.unseen_by_tierline.join(", "))
+        };
+        s += &format!(
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
+            r.arm,
+            if r.cost_source == "tierline" {
+                usd(r.cost_per_success)
+            } else {
+                "n/a".into()
+            },
+            usd(r.claude_cost_usd),
+            usd(r.claude_cost_per_success),
+            models_cell(&r.claude_models),
+            models_cell(&r.tierline_models),
+            unseen
         );
     }
     s += &format!(

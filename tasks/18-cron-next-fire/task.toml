@@ -1,0 +1,5 @@
+id = "18-cron-next-fire"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement `next_fire(expr, after)` in cron.py exactly as specified in its module docstring (5-field cron parsing and the next matching time, including the day-of-month/day-of-week OR rule and nonexistent days). Standard library only."""

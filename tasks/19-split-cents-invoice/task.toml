@@ -1,0 +1,5 @@
+id = "19-split-cents-invoice"
+category = "fix"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Splitting money is broken: `split_cents` in ledger.py does not add up to the total, and `apply_discount` in invoice.py (which should use it) gives wrong totals. Make both behave exactly as their docstrings describe, across all the modules involved. Do not use floats for the money maths."""

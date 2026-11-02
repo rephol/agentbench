@@ -1,4 +1,4 @@
-use agentbench::agent::{claude_args, parse_reported_cost, AgentKind};
+use agentbench::agent::{claude_args, parse_model_usage, parse_reported_cost, AgentKind};
 use agentbench::config::{Arm, Config};
 use agentbench::report::{markdown, summarize_arm, svg};
 use agentbench::results::{self, attribute, Attempt, TierlineRecord, Usage};
@@ -45,20 +45,26 @@ fn attempt(arm: &str, task: &str, sample: u32, pass: bool, start: u128, end: u12
         start_ms: start,
         end_ms: end,
         agent_cost_usd: None,
+        model_usage: BTreeMap::new(),
     }
 }
 
 // ---- task loading ----
 
 #[test]
-fn loads_fifteen_valid_tasks_with_a_difficulty_spread() {
+fn loads_valid_tasks_with_a_difficulty_spread() {
     let tasks = load_tasks(&tasks_dir()).unwrap();
-    assert_eq!(tasks.len(), 15);
+    assert_eq!(tasks.len(), 25);
     let count = |d: &str| tasks.iter().filter(|t| t.meta.difficulty == d).count();
     assert_eq!(count("trivial"), 1);
     assert!(count("easy") >= 3);
     assert!(count("medium") >= 5);
-    assert_eq!(count("hard"), 4);
+    assert_eq!(count("hard"), 14);
+    let v2 = tasks
+        .iter()
+        .filter(|t| t.meta.tags.iter().any(|x| x == "hard-v2"))
+        .count();
+    assert_eq!(v2, 10);
     let mut ids: Vec<_> = tasks.iter().map(|t| t.id().to_string()).collect();
     let sorted = ids.clone();
     ids.sort();
@@ -301,7 +307,7 @@ fn fake_agent_full_run_resume_and_report() {
     assert!(r.status.success());
 
     let attempts = results::read(&out).unwrap();
-    assert_eq!(attempts.len(), 30);
+    assert_eq!(attempts.len(), 50);
     assert!(attempts.iter().filter(|a| a.arm == "alpha").all(|a| a.pass));
     assert!(attempts.iter().filter(|a| a.arm == "beta").all(|a| !a.pass));
 
@@ -320,7 +326,7 @@ fn fake_agent_full_run_resume_and_report() {
         "1",
     ]);
     assert!(r.status.success());
-    assert_eq!(results::read(&out).unwrap().len(), 30);
+    assert_eq!(results::read(&out).unwrap().len(), 50);
 
     let rep = tmp.path().join("rep");
     let r = cli(&[
@@ -335,11 +341,11 @@ fn fake_agent_full_run_resume_and_report() {
     assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
     let md = std::fs::read_to_string(rep.join("report.md")).unwrap();
     assert!(
-        md.contains("| alpha | 15 | 15 | 100.0% (15/15) | 100.0% to 100.0% |"),
+        md.contains("| alpha | 25 | 25 | 100.0% (25/25) | 100.0% to 100.0% |"),
         "{md}"
     );
     assert!(
-        md.contains("| beta | 15 | 15 | 0.0% (0/15) | 0.0% to 0.0% |"),
+        md.contains("| beta | 25 | 25 | 0.0% (0/25) | 0.0% to 0.0% |"),
         "{md}"
     );
     let svg = std::fs::read_to_string(rep.join("report.svg")).unwrap();
@@ -531,4 +537,79 @@ fn cost_gaps_and_fallbacks() {
 fn tierline_record_ignores_unknown_fields() {
     let r: TierlineRecord = serde_json::from_str(r#"{"ts_ms":5,"future_field":{"x":1}}"#).unwrap();
     assert_eq!((r.ts_ms, r.input_tokens, r.cost_usd), (5, 0, None));
+}
+
+// ---- per-model accounting ----
+
+const CLAUDE_JSON: &str = r#"{"total_cost_usd":0.30,"modelUsage":{
+ "claude-sonnet-5-5":{"inputTokens":10,"outputTokens":200,"cacheReadInputTokens":3000,"cacheCreationInputTokens":400,"costUSD":0.10},
+ "claude-opus-5-5":{"inputTokens":5,"outputTokens":50,"cacheReadInputTokens":0,"cacheCreationInputTokens":100,"costUSD":0.20}}}"#;
+
+#[test]
+fn model_usage_is_parsed_from_claude_json() {
+    let m = parse_model_usage(CLAUDE_JSON);
+    assert_eq!(m.len(), 2);
+    let o = &m["claude-opus-5-5"];
+    assert_eq!(
+        (o.input, o.output, o.cache_read, o.cache_creation),
+        (5, 50, 0, 100)
+    );
+    assert!((o.cost_usd - 0.20).abs() < 1e-9);
+    assert_eq!(m["claude-sonnet-5-5"].cache_read, 3000);
+    assert!(parse_model_usage("not json").is_empty());
+    assert!(parse_model_usage(r#"{"total_cost_usd":1}"#).is_empty());
+}
+
+#[test]
+fn report_flags_models_claude_saw_but_tierline_did_not() {
+    let mut a = attempt("adv", "t", 0, true, 100, 200);
+    a.agent_cost_usd = Some(0.30);
+    a.model_usage = parse_model_usage(CLAUDE_JSON);
+    let rec = |model: &str| TierlineRecord {
+        ts_ms: 150,
+        model: Some(model.into()),
+        input_tokens: 10,
+        output_tokens: 200,
+        cache_creation_tokens: 400,
+        cache_read_tokens: 3000,
+        cost_usd: Some(0.10),
+    };
+    let u = attribute(&a, &[rec("claude-sonnet-5-5")]);
+    assert_eq!(u.models["claude-sonnet-5-5"].output, 200);
+    let s = summarize_arm("adv", &[&a], Some(&[u]), 100, 1);
+    assert_eq!(s.unseen_by_tierline, vec!["claude-opus-5-5".to_string()]);
+    assert_eq!(s.claude_cost_per_success, Some(0.30));
+    assert_eq!(s.cost_per_success, Some(0.10));
+    let md = markdown(&[s], 100);
+    assert!(md.contains("**claude-opus-5-5**"), "{md}");
+    // Nothing unseen when tierline saw both.
+    let u2 = attribute(&a, &[rec("claude-sonnet-5-5"), rec("claude-opus-5-5")]);
+    let s2 = summarize_arm("adv", &[&a], Some(&[u2]), 100, 1);
+    assert!(s2.unseen_by_tierline.is_empty());
+}
+
+#[test]
+fn tag_filter_selects_only_tagged_tasks() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = bench_toml(tmp.path());
+    let out = tmp.path().join("r.jsonl");
+    let r = cli(&[
+        "run",
+        "--config",
+        cfg.to_str().unwrap(),
+        "--agent",
+        "fake-solve",
+        "--out",
+        out.to_str().unwrap(),
+        "--arms",
+        "alpha",
+        "--samples",
+        "1",
+        "--tag",
+        "hard-v2",
+    ]);
+    assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
+    let attempts = results::read(&out).unwrap();
+    assert_eq!(attempts.len(), 10);
+    assert!(attempts.iter().all(|a| a.task.as_str() >= "16"));
 }

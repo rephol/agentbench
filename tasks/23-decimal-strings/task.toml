@@ -1,0 +1,5 @@
+id = "23-decimal-strings"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement the functions in decnum.py exactly as specified in its module docstring: exact arithmetic, comparison, rounding (seven modes) and division on decimal strings, with canonical output and strict input validation. Do not use the `decimal` or `fractions` modules or floats."""

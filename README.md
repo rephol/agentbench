@@ -65,7 +65,7 @@ neither exists the cost is `n/a`. Nothing is estimated or invented.
 
 ## Tasks
 
-15 tasks under `tasks/<id>/`:
+25 tasks under `tasks/<id>/` (01-15 original, 16-25 tagged `hard-v2`; select with `agentbench run --tag hard-v2`):
 
 ```
 task.toml    id, category, difficulty (trivial|easy|medium|hard), prompt
@@ -95,6 +95,16 @@ only requirement for the checks; no pytest.
 | 13-ttl-lru-cache | hard | implement an LRU cache with TTL and exact counters |
 | 14-expression-evaluator | hard | write a parser matching Python's arithmetic semantics, no `eval` |
 | 15-task-scheduler-bugs | hard | fix several interacting bugs in a dependency planner |
+| 16-json5-lite-parser | hard | lenient JSON reader with exact error positions |
+| 17-semver-ranges | hard | npm-style version ranges incl. the prerelease rule |
+| 18-cron-next-fire | hard | 5-field cron next-fire with day-of-month/week OR rule |
+| 19-split-cents-invoice | hard | largest-remainder money split across two modules |
+| 20-layered-config | hard | layered config merge, env coercion, provenance |
+| 21-dependency-resolver | hard | version resolver with backtracking, deterministic choice |
+| 22-editor-undo-redo | hard | undo/redo with groups, limits, deep-copy history |
+| 23-decimal-strings | hard | exact decimal-string arithmetic and 7 rounding modes |
+| 24-leaderboard-ranking | hard | competition ranking, paging, neighbours, percentiles |
+| 25-grid-path-turns | hard | cheapest grid path with turn costs and one-way tiles |
 
 ## Running it
 
@@ -146,7 +156,7 @@ agentbench report
 override. `run` appends to the results file and skips attempts already recorded, so an
 interrupted arm can be resumed.
 
-`report` prints a markdown table and writes `report/report.md` and `report/report.svg`
+`report` also shows Claude's own per-model usage (`modelUsage` from `--output-format json`) next to tierline's, and flags models that only Claude saw (server-side calls such as the advisor). `report` prints a markdown table and writes `report/report.md` and `report/report.svg`
 (success rate with CI whiskers; cost per success).
 
 ## Results

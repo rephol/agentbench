@@ -1,0 +1,5 @@
+id = "16-json5-lite-parser"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement `loads` in json5lite.py exactly as specified in the module docstring (a lenient JSON reader with comments, trailing commas, single quotes, unquoted keys, hex numbers and precise error positions). Use only the standard library and do not use `json`, `ast` or `eval` to do the parsing."""

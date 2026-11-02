@@ -1,0 +1,5 @@
+id = "24-leaderboard-ranking"
+category = "fix"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """The leaderboard in leaderboard.py / pagination.py returns wrong ranks, orderings, pages, neighbour windows and percentiles. Make every method behave exactly as the module docstring specifies (standard competition ranking, name tie-break, 1-based pages, validation). Fix whichever modules need it. Standard library only."""

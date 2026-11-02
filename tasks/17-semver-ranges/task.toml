@@ -1,0 +1,5 @@
+id = "17-semver-ranges"
+category = "implement"
+difficulty = "hard"
+tags = ["hard-v2"]
+prompt = """Implement `satisfies(version, range_expr)` in semver.py exactly as specified in its module docstring (npm-style semantic version ranges: caret, tilde, x-ranges, hyphen ranges, `||`, and the prerelease rule). Standard library only; do not shell out to npm or node."""

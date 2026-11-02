@@ -19,6 +19,7 @@ fn arm(name: &str) -> Arm {
         model: None,
         env: BTreeMap::new(),
         tierline_log: None,
+        extra_args: Vec::new(),
     }
 }
 

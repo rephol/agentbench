@@ -79,6 +79,7 @@ pub struct AgentSpec<'a> {
     pub claude_bin: &'a str,
     pub model: Option<&'a str>,
     pub env: &'a BTreeMap<String, String>,
+    pub extra_args: &'a [String],
     pub timeout: Duration,
 }
 
@@ -99,6 +100,7 @@ pub async fn run_agent(spec: &AgentSpec<'_>, task: &Task, workdir: &Path) -> Res
         AgentKind::Claude => {
             let mut cmd = Command::new(spec.claude_bin);
             cmd.args(claude_args(&task.meta.prompt, spec.model))
+                .args(spec.extra_args)
                 .current_dir(workdir)
                 .envs(spec.env)
                 // A nested session would otherwise inherit the parent's markers.

@@ -66,6 +66,7 @@ pub async fn run_attempt(
         claude_bin: opts.claude_bin,
         model: arm.model.as_deref(),
         env: &arm.env,
+        extra_args: &arm.extra_args,
         timeout: opts.timeout,
     };
     let start_ms = now_ms();
@@ -99,6 +100,7 @@ pub async fn validate_task(task: &Task, python: &str) -> Result<(bool, bool)> {
         model: None,
         env: Default::default(),
         tierline_log: None,
+        extra_args: Vec::new(),
     };
     let mut res = [false; 2];
     for (i, agent) in [AgentKind::FakeNoop, AgentKind::FakeSolve]

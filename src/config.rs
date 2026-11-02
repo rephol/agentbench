@@ -58,6 +58,9 @@ pub struct Arm {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub tierline_log: Option<String>,
+    /// Extra arguments appended to the `claude` command line (e.g. `--settings`).
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

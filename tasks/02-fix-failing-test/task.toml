@@ -1,0 +1,4 @@
+id = "02-fix-failing-test"
+category = "bugfix"
+difficulty = "easy"
+prompt = "`python -m unittest` fails in this project: the tests for `slugify` in tests/test_textutil.py do not pass. Fix the implementation in textutil.py so the tests pass. Do not edit the tests."

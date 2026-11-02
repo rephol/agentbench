@@ -1,0 +1,4 @@
+id = "07-parse-access-log"
+category = "implement"
+difficulty = "medium"
+prompt = "Implement `parse_line` and `summarize` in logparse.py according to their docstrings."

@@ -1,0 +1,4 @@
+id = "01-paginate-off-by-one"
+category = "bugfix"
+difficulty = "trivial"
+prompt = "The function `paginate` in pager.py drops the last item of every page. Fix it. Do not change its signature."

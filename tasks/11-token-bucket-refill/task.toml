@@ -1,0 +1,4 @@
+id = "11-token-bucket-refill"
+category = "bugfix"
+difficulty = "medium"
+prompt = "The TokenBucket in ratelimit.py is too strict: under steady slow traffic it rejects requests it should allow, because partial refills get lost. Find and fix the bug(s) so it behaves as documented. Keep the public API."

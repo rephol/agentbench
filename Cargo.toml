@@ -1,0 +1,15 @@
+[package]
+name = "agentbench"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Small benchmark harness for coding agents: success rate and cost per successful task"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "time", "io-util"] }
+toml = "0.8"

@@ -1,0 +1,4 @@
+id = "08-extract-money-helper"
+category = "refactor"
+difficulty = "medium"
+prompt = "billing/invoice.py repeats the same currency formatting code in three places. Extract it into a function `format_money(amount)` in a new module billing/money.py and use it from invoice.py. Output must stay byte-for-byte identical and `python -m unittest` must keep passing."

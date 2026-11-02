@@ -1,0 +1,4 @@
+id = "10-merge-intervals"
+category = "implement"
+difficulty = "medium"
+prompt = "Implement `merge_intervals` in intervals.py according to its docstring."

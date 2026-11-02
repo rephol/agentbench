@@ -1,0 +1,4 @@
+id = "13-ttl-lru-cache"
+category = "implement"
+difficulty = "hard"
+prompt = "Implement the `TTLCache` class in cache.py according to its docstring. Standard library only. Follow the documented semantics exactly, including when expired entries are removed and counted."

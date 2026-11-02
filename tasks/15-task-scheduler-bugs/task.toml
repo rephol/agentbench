@@ -1,0 +1,4 @@
+id = "15-task-scheduler-bugs"
+category = "bugfix"
+difficulty = "hard"
+prompt = "The task scheduler in sched/planner.py has several bugs: `python -m unittest` shows some of them and there are more. Make `plan` and `critical_path` behave exactly as their docstrings say, without changing the function signatures or the exception class names."

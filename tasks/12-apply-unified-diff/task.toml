@@ -1,0 +1,4 @@
+id = "12-apply-unified-diff"
+category = "implement"
+difficulty = "hard"
+prompt = "Implement `apply_patch` in patching.py according to its docstring. Only the Python standard library may be used, and you must not shell out to `patch` or `git`."

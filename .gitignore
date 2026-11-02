@@ -1,0 +1,6 @@
+/target
+/results
+/logs
+/report
+__pycache__/
+.DS_Store

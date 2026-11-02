@@ -1,0 +1,4 @@
+id = "09-todo-remove-command"
+category = "feature"
+difficulty = "medium"
+prompt = "Add a `remove ID` command to the todo CLI in todo.py. It deletes the item with that id and prints `removed ID`. If no item has that id it prints `no such id: ID` to stderr and exits with status 1. Ids of removed items must not be reused by later `add` commands. Existing commands keep working."

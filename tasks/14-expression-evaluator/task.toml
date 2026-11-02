@@ -1,0 +1,4 @@
+id = "14-expression-evaluator"
+category = "implement"
+difficulty = "hard"
+prompt = "Implement `evaluate` in calc.py according to its docstring. Do not use `eval`, `exec`, `compile` or the `ast` module; write a real parser."

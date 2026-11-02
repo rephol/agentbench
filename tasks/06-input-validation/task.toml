@@ -1,0 +1,4 @@
+id = "06-input-validation"
+category = "feature"
+difficulty = "medium"
+prompt = "`create_user` in users.py trusts its input. Add validation: `name` must be a non-empty string after stripping whitespace (store the stripped value); `email` must be a string with exactly one '@', a non-empty part before it, and a domain after it that contains a '.' and does not start or end with '.' (store it lowercased and stripped); `age` must be an int (not a bool) from 0 to 150 inclusive. Any violation raises ValueError. Valid input behaves as before."

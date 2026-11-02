@@ -1,0 +1,32 @@
+# Arms differ in which tierline instance they talk to (ANTHROPIC_BASE_URL) and
+# optionally in --model. Start one tierline per arm, each with its own
+# TIERLINE_LOG, and run one arm at a time (see README).
+
+[run]
+samples = 2
+timeout_secs = 900
+tasks_dir = "tasks"
+python = "python3"
+claude_bin = "claude"
+
+# All traffic forced to Opus; tierline in pass-through mode just logs cost.
+[[arm]]
+name = "opus-direct"
+model = "opus"
+tierline_log = "logs/opus-direct.jsonl"
+[arm.env]
+ANTHROPIC_BASE_URL = "http://127.0.0.1:8787"
+
+# Default model, tierline routing off (pass-through).
+[[arm]]
+name = "tierline-off"
+tierline_log = "logs/tierline-off.jsonl"
+[arm.env]
+ANTHROPIC_BASE_URL = "http://127.0.0.1:8788"
+
+# Same default model request, tierline routing on (TIERLINE_ROUTE=1).
+[[arm]]
+name = "tierline-route"
+tierline_log = "logs/tierline-route.jsonl"
+[arm.env]
+ANTHROPIC_BASE_URL = "http://127.0.0.1:8789"

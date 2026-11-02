@@ -1,0 +1,4 @@
+id = "04-add-cli-flag"
+category = "feature"
+difficulty = "easy"
+prompt = "Add a `--shout` flag to the CLI in greet.py. With it, the greeting is printed in upper case. Without it, behavior must not change. Keep `--times` working."

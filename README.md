@@ -161,17 +161,50 @@ interrupted arm can be resumed.
 
 ## Results
 
-**TBD.** No real run has been made.
+**Pilot results, not a conclusion.** These come from one machine, on 2026-11-02, with tasks
+written for this repo, using Claude Code's headless mode on a Claude subscription. All dollar
+figures are API-equivalent estimates computed from token counts and published API prices.
+Nothing was actually billed at these rates.
 
-| Arm | Success rate (95% CI) | Total cost | Cost per success |
-|---|---|---|---|
-| opus-direct | TBD | TBD | TBD |
-| tierline-off | TBD | TBD | TBD |
-| tierline-route | TBD | TBD | TBD |
+### Hard set (`hard-v2`: 10 tasks × 2 samples = 20 attempts per arm)
+
+| Arm | Main model | Success rate (95% CI) | Est. cost | Cost per success |
+|---|---|---|---|---|
+| tierline-off | Opus on every request | 90% (18/20), 70–100% | $5.82 | $0.323 |
+| tierline-route | routed per request by [tierline](https://github.com/rephol/tierline) | 90% (18/20), 70–100% | $3.68 | $0.204 |
+| sonnet (advisor configured) | Sonnet | 90% (18/20), 70–100% | $3.12 | $0.174 |
+
+### Easy set (15 tasks × 1 sample)
+
+All three arms passed 15/15. The cost per success was $0.205 for tierline-off, $0.139 for
+tierline-route and $0.108 for the Sonnet arm.
+
+### What this does and doesn't show
+
+- **The arms didn't differ on quality.** The only failures were task 16, which failed
+  identically in every arm. That suggests a flaw in the task, not in the models; it is under
+  review. With 20 attempts per arm, the intervals can't tell these arms apart.
+- **Cost did differ.** Routing cost about 37% less per success than Opus on every request.
+  Sonnet alone cost about 46% less. On these tasks a cheaper main model lost nothing, so the
+  honest takeaway so far is "Sonnet was enough here", not "routing wins".
+- **Routing behaved sensibly.** tierline sent 71 coding-edit and writing requests to Sonnet
+  and kept all 23 debugging requests on Opus.
+- **The advisor never fired.** The third arm ran Sonnet with `advisorModel: opus` set per
+  invocation, but Claude Code's per-model usage shows no Opus calls. The arm therefore
+  measures Sonnet alone. Whether the advisor wasn't triggered or the setting didn't take
+  effect hasn't been checked yet.
+- **Cost sources disagree.** Costs here come from tierline's log. Claude Code's
+  self-reported cost was about 1.3–1.4× higher on identical token counts, and it reports the
+  model it requested, so in the route arm it prices Sonnet traffic as Opus. Each attempt also
+  includes one startup request tierline can't price. The costs are therefore slight lower
+  bounds.
+
+Next steps: fix or drop task 16, add tasks where Sonnet genuinely fails, add a plain Sonnet
+arm, and make the advisor fire verifiably.
 
 ## Limitations
 
-- 15 tasks is small: expect wide intervals, and treat small differences as noise.
+- 25 tasks is small: expect wide intervals, and treat small differences as noise.
 - The tasks are small single-repo Python jobs; they say little about large codebases.
 - Tasks cannot be shown to be free of training-set overlap.
 - Wall-clock joining needs the sequential, one-proxy-per-arm discipline above.

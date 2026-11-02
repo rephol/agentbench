@@ -166,6 +166,11 @@ written for this repo, using Claude Code's headless mode on a Claude subscriptio
 figures are API-equivalent estimates computed from token counts and published API prices.
 Nothing was actually billed at these rates.
 
+**Effort: low.** The harness didn't pin an effort level, so every arm inherited `low` from
+the local Claude Code settings. The captured request bodies carry
+`output_config: {effort: "low"}` with adaptive thinking. Model comparisons at higher effort
+may differ, and later runs will pin `--effort` per arm.
+
 ### Hard set (`hard-v2`: 10 tasks × 2 samples = 20 attempts per arm)
 
 | Arm | Main model | Success rate (95% CI) | Est. cost | Cost per success |

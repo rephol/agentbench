@@ -127,14 +127,17 @@ fn claude_command_line_is_headless_and_non_interactive() {
         [
             "-p",
             "do it",
-            "--dangerously-skip-permissions",
+            "--permission-mode",
+            "dontAsk",
+            "--allowedTools",
+            "Read,Edit,Write,Glob,Grep,Bash(python3:*)",
             "--output-format",
             "json",
             "--no-session-persistence"
         ]
     );
     let with_model = claude_args("do it", Some("opus"));
-    assert_eq!(&with_model[6..], ["--model", "opus"]);
+    assert_eq!(&with_model[9..], ["--model", "opus"]);
 }
 
 #[test]
@@ -190,7 +193,7 @@ async fn agent_does_not_see_check_files_and_gets_arm_env() {
     assert!(!rec.contains("solution"), "agent saw the solution: {rec}");
     assert!(rec.contains("BASE=http://127.0.0.1:9"));
     assert!(rec.contains("-p "));
-    assert!(rec.contains("--dangerously-skip-permissions"));
+    assert!(rec.contains("--permission-mode dontAsk"));
     assert!(rec.contains("--model opus"));
     // The fake changed nothing, so the check (copied in afterwards) fails.
     assert!(!got.pass);

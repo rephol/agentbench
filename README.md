@@ -116,11 +116,12 @@ money.
 For every attempt, in the attempt's temp directory:
 
 ```
-claude -p "<task prompt>" --dangerously-skip-permissions --output-format json --no-session-persistence [--model <arm.model>]
+claude -p "<task prompt>" --permission-mode dontAsk --allowedTools "Read,Edit,Write,Glob,Grep,Bash(python3:*)" --output-format json --no-session-persistence [--model <arm.model>]
 ```
 
-`--dangerously-skip-permissions` is acceptable only because the working directory is a
-throwaway copy of a tiny fixture. The arm's `env` is added to the inherited environment
+Permissions are restricted rather than bypassed: `dontAsk` mode denies anything not on the
+allowlist (file read/edit/write/search tools, and Bash limited to `python3`) without
+prompting, so headless runs cannot hang or run arbitrary commands. The arm's `env` is added to the inherited environment
 (so `ANTHROPIC_BASE_URL` can point at tierline), and a per-task timeout
 (`run.timeout_secs`) kills the process.
 

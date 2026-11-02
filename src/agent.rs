@@ -38,11 +38,14 @@ pub struct AgentOutcome {
     pub reported_cost_usd: Option<f64>,
 }
 
+/// Tools the agent may use; everything else is denied.
+pub const ALLOWED_TOOLS: &str = "Read,Edit,Write,Glob,Grep,Bash(python3:*)";
+
 /// The exact argument list passed to the `claude` binary (after the binary name).
 ///
 /// - `-p <prompt>`: headless, print mode, exits when done.
-/// - `--dangerously-skip-permissions`: no prompts; safe only because the cwd is a
-///   throwaway copy of the fixture.
+/// - `--permission-mode dontAsk` + `--allowedTools`: anything not on the allowlist is
+///   denied without prompting. Only file tools and `python3` via Bash are allowed.
 /// - `--output-format json`: one JSON result object, which carries `total_cost_usd`.
 /// - `--no-session-persistence`: keep the runs from piling up in the session list.
 /// - `--model <m>`: only when the arm sets one.
@@ -50,7 +53,10 @@ pub fn claude_args(prompt: &str, model: Option<&str>) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "-p".into(),
         prompt.into(),
-        "--dangerously-skip-permissions".into(),
+        "--permission-mode".into(),
+        "dontAsk".into(),
+        "--allowedTools".into(),
+        ALLOWED_TOOLS.into(),
         "--output-format".into(),
         "json".into(),
         "--no-session-persistence".into(),

@@ -18,8 +18,7 @@ fn arm(name: &str) -> Arm {
         name: name.into(),
         model: None,
         env: BTreeMap::new(),
-        tierline_log: None,
-        extra_args: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -29,6 +28,7 @@ fn opts<'a>(agent: AgentKind, claude_bin: &'a str, secs: u64) -> RunOpts<'a> {
         python: "python3",
         claude_bin,
         timeout: Duration::from_secs(secs),
+        clean: false,
     }
 }
 
@@ -612,4 +612,53 @@ fn tag_filter_selects_only_tagged_tasks() {
     let attempts = results::read(&out).unwrap();
     assert_eq!(attempts.len(), 10);
     assert!(attempts.iter().all(|a| a.task.as_str() >= "16"));
+}
+
+#[tokio::test]
+async fn proxy_starts_waits_for_port_and_is_killed() {
+    use agentbench::config::ProxyConfig;
+    use agentbench::proxy::Proxy;
+    // Find a free port, release it, then have a python listener take it.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let listen = format!("127.0.0.1:{port}");
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = ProxyConfig {
+        command: "python3".into(),
+        args: vec![
+            "-c".into(),
+            "import socket,time,os;s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);\
+             a=os.environ['TIERLINE_LISTEN'].split(':');time.sleep(0.3);s.bind((a[0],int(a[1])));s.listen();print('up',flush=True);time.sleep(60)"
+                .into(),
+        ],
+        env: BTreeMap::new(),
+        listen: listen.clone(),
+        log: Some("logs/proxy.out".into()),
+        ready_timeout_secs: 10,
+    };
+    let p = Proxy::start(&cfg, dir.path()).await.unwrap();
+    assert_eq!(p.base_url, format!("http://{listen}"));
+    assert!(tokio::net::TcpStream::connect(&listen).await.is_ok());
+    p.stop().await;
+    assert!(tokio::net::TcpStream::connect(&listen).await.is_err());
+    assert!(dir.path().join("logs/proxy.out").exists());
+}
+
+#[tokio::test]
+async fn proxy_that_exits_early_is_an_error() {
+    use agentbench::config::ProxyConfig;
+    use agentbench::proxy::Proxy;
+    let cfg = ProxyConfig {
+        command: "python3".into(),
+        args: vec!["-c".into(), "pass".into()],
+        env: BTreeMap::new(),
+        listen: "127.0.0.1:1".into(),
+        log: None,
+        ready_timeout_secs: 5,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    assert!(Proxy::start(&cfg, dir.path()).await.is_err());
 }

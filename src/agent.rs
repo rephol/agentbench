@@ -71,6 +71,52 @@ pub fn claude_args(prompt: &str, model: Option<&str>) -> Vec<String> {
     a
 }
 
+/// Flags added by `clean = true`: ignore user-level settings (hooks, plugins), load no
+/// MCP servers and no slash commands.
+pub const CLEAN_ARGS: [&str; 6] = [
+    "--setting-sources",
+    "project,local",
+    "--strict-mcp-config",
+    "--mcp-config",
+    r#"{"mcpServers":{}}"#,
+    "--disable-slash-commands",
+];
+
+/// Env vars starting with these prefixes are removed from the agent's environment
+/// when `clean = true` (they carry the parent Claude Code session's state).
+pub const SCRUB_PREFIXES: [&str; 2] = ["CLAUDE", "AI_AGENT"];
+
+/// Scrubbed-prefix variables that are kept because authentication needs them.
+/// Everything else with a scrubbed prefix goes, as in the original `cleanenv.sh`.
+pub const KEEP_VARS: [&str; 2] = ["CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR"];
+
+/// Which of `names` to remove from the environment for a clean run.
+pub fn vars_to_scrub<I: IntoIterator<Item = String>>(names: I) -> Vec<String> {
+    names
+        .into_iter()
+        .filter(|n| SCRUB_PREFIXES.iter().any(|p| n.starts_with(p)))
+        .filter(|n| !KEEP_VARS.contains(&n.as_str()))
+        .collect()
+}
+
+/// Like [`claude_args`], plus the clean-config flags and `--effort <level>`.
+pub fn claude_args_with(
+    prompt: &str,
+    model: Option<&str>,
+    clean: bool,
+    effort: Option<&str>,
+) -> Vec<String> {
+    let mut a = claude_args(prompt, model);
+    if clean {
+        a.extend(CLEAN_ARGS.iter().map(|x| x.to_string()));
+    }
+    if let Some(e) = effort {
+        a.push("--effort".into());
+        a.push(e.into());
+    }
+    a
+}
+
 /// Pulls `total_cost_usd` out of claude's `--output-format json` stdout.
 pub fn parse_reported_cost(stdout: &str) -> Option<f64> {
     let v: serde_json::Value = serde_json::from_str(stdout.trim()).ok()?;
@@ -108,6 +154,8 @@ pub struct AgentSpec<'a> {
     pub model: Option<&'a str>,
     pub env: &'a BTreeMap<String, String>,
     pub extra_args: &'a [String],
+    pub clean: bool,
+    pub effort: Option<&'a str>,
     pub timeout: Duration,
 }
 
@@ -127,12 +175,23 @@ pub async fn run_agent(spec: &AgentSpec<'_>, task: &Task, workdir: &Path) -> Res
         }
         AgentKind::Claude => {
             let mut cmd = Command::new(spec.claude_bin);
-            cmd.args(claude_args(&task.meta.prompt, spec.model))
-                .args(spec.extra_args)
-                .current_dir(workdir)
-                .envs(spec.env)
-                // A nested session would otherwise inherit the parent's markers.
-                .env_remove("CLAUDECODE")
+            cmd.args(claude_args_with(
+                &task.meta.prompt,
+                spec.model,
+                spec.clean,
+                spec.effort,
+            ))
+            .args(spec.extra_args)
+            .current_dir(workdir);
+            // A nested session would otherwise inherit the parent's markers.
+            cmd.env_remove("CLAUDECODE");
+            if spec.clean {
+                for v in vars_to_scrub(std::env::vars().map(|(k, _)| k)) {
+                    cmd.env_remove(v);
+                }
+            }
+            // Arm env goes last so an arm can deliberately set a scrubbed name.
+            cmd.envs(spec.env)
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
@@ -158,5 +217,76 @@ pub async fn run_agent(spec: &AgentSpec<'_>, task: &Task, workdir: &Path) -> Res
                 }),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn scrubs_claude_and_ai_agent_but_keeps_auth() {
+        let got = vars_to_scrub(names(&[
+            "CLAUDECODE",
+            "CLAUDE_CODE_ENTRYPOINT",
+            "CLAUDE_PLUGIN_ROOT",
+            "AI_AGENT",
+            "AI_AGENT_NAME",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "CLAUDE_CONFIG_DIR",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+            "PATH",
+            "HOME",
+            "MYCLAUDE",
+        ]));
+        assert_eq!(
+            got,
+            names(&[
+                "CLAUDECODE",
+                "CLAUDE_CODE_ENTRYPOINT",
+                "CLAUDE_PLUGIN_ROOT",
+                "AI_AGENT",
+                "AI_AGENT_NAME"
+            ])
+        );
+    }
+
+    #[test]
+    fn plain_args_unchanged_without_clean_or_effort() {
+        assert_eq!(
+            claude_args_with("p", Some("opus"), false, None),
+            claude_args("p", Some("opus"))
+        );
+    }
+
+    #[test]
+    fn clean_adds_isolation_flags_before_effort() {
+        let a = claude_args_with("p", None, true, Some("medium"));
+        let base = claude_args("p", None).len();
+        assert_eq!(
+            &a[base..],
+            [
+                "--setting-sources",
+                "project,local",
+                "--strict-mcp-config",
+                "--mcp-config",
+                r#"{"mcpServers":{}}"#,
+                "--disable-slash-commands",
+                "--effort",
+                "medium"
+            ]
+        );
+    }
+
+    #[test]
+    fn effort_without_clean() {
+        let a = claude_args_with("p", None, false, Some("high"));
+        assert!(!a.contains(&"--setting-sources".to_string()));
+        assert_eq!(&a[a.len() - 2..], ["--effort", "high"]);
     }
 }

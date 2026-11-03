@@ -1,5 +1,6 @@
-use agentbench::agent::{claude_args, AgentKind};
+use agentbench::agent::{claude_args_with, AgentKind};
 use agentbench::config::Config;
+use agentbench::proxy::Proxy;
 use agentbench::report;
 use agentbench::results;
 use agentbench::runner::{run_attempt, validate_task, RunOpts};
@@ -153,11 +154,19 @@ async fn main() -> Result<()> {
                 agent
             );
             if kind == AgentKind::Claude {
-                println!(
-                    "each attempt runs: {} {:?}",
-                    cfg.run.claude_bin,
-                    claude_args("<prompt>", None)
-                );
+                for arm in &arm_list {
+                    println!(
+                        "{}: {} {:?}",
+                        arm.name,
+                        cfg.run.claude_bin,
+                        claude_args_with(
+                            "<prompt>",
+                            arm.model.as_deref(),
+                            arm.is_clean(&cfg.run),
+                            arm.effort.as_deref()
+                        )
+                    );
+                }
                 if !yes {
                     bail!("this launches real `claude` sessions; re-run with --yes to proceed");
                 }
@@ -167,29 +176,52 @@ async fn main() -> Result<()> {
                 python: &cfg.run.python,
                 claude_bin: &cfg.run.claude_bin,
                 timeout: Duration::from_secs(cfg.run.timeout_secs),
+                clean: cfg.run.clean,
             };
             // Arm by arm, strictly sequential: the tierline join relies on it.
             for arm in arm_list {
-                for sample in 0..samples {
-                    for t in &all {
-                        if done
-                            .iter()
-                            .any(|d| d.arm == arm.name && d.task == t.id() && d.sample == sample)
-                        {
-                            continue;
-                        }
-                        let a = run_attempt(t, arm, sample, &opts).await?;
-                        println!(
-                            "{} {} #{} {} ({} ms)",
-                            a.arm,
-                            a.task,
-                            a.sample,
-                            if a.pass { "pass" } else { "FAIL" },
-                            a.duration_ms
-                        );
-                        results::append(&out, &a)?;
-                    }
+                // The proxy (if any) lives exactly as long as this block: it is killed
+                // on success, on error (drop) and on Ctrl-C.
+                let proxy = match &arm.proxy {
+                    Some(p) => Some(Proxy::start(p, &base).await?),
+                    None => None,
+                };
+                let mut arm_run = arm.clone();
+                if let Some(p) = &proxy {
+                    arm_run
+                        .env
+                        .insert("ANTHROPIC_BASE_URL".into(), p.base_url.clone());
                 }
+                let body = async {
+                    for sample in 0..samples {
+                        for t in &all {
+                            if done.iter().any(|d| {
+                                d.arm == arm.name && d.task == t.id() && d.sample == sample
+                            }) {
+                                continue;
+                            }
+                            let a = run_attempt(t, &arm_run, sample, &opts).await?;
+                            println!(
+                                "{} {} #{} {} ({} ms)",
+                                a.arm,
+                                a.task,
+                                a.sample,
+                                if a.pass { "pass" } else { "FAIL" },
+                                a.duration_ms
+                            );
+                            results::append(&out, &a)?;
+                        }
+                    }
+                    Ok::<(), anyhow::Error>(())
+                };
+                let r = tokio::select! {
+                    r = body => r,
+                    _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("interrupted")),
+                };
+                if let Some(p) = proxy {
+                    p.stop().await;
+                }
+                r?;
             }
         }
         Cmd::Report {

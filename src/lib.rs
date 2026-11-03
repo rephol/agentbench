@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod config;
+pub mod proxy;
 pub mod report;
 pub mod results;
 pub mod runner;

@@ -126,38 +126,42 @@ money.
 For every attempt, in the attempt's temp directory:
 
 ```
-claude -p "<task prompt>" --permission-mode dontAsk --allowedTools "Read,Edit,Write,Glob,Grep,Bash(python3:*)" --output-format json --no-session-persistence [--model <arm.model>]
+claude -p "<task prompt>" --permission-mode dontAsk --allowedTools "Read,Edit,Write,Glob,Grep,Bash(python3:*)" --output-format json --no-session-persistence [--model <arm.model>] [clean flags] [--effort <arm.effort>] [arm.extra_args]
 ```
 
 Permissions are restricted rather than bypassed: `dontAsk` mode denies anything not on the
 allowlist (file read/edit/write/search tools, and Bash limited to `python3`) without
-prompting, so headless runs cannot hang or run arbitrary commands. The arm's `env` is added to the inherited environment
-(so `ANTHROPIC_BASE_URL` can point at tierline), and a per-task timeout
-(`run.timeout_secs`) kills the process.
+prompting. The arm's `env` is added to the inherited environment, and `run.timeout_secs`
+kills a stuck attempt.
 
-### Running the three arms against tierline
+Arm and run options for this adapter:
 
-Start one tierline per arm with its own port and log, then run that arm alone:
+| Key | Where | Effect |
+|---|---|---|
+| `clean = true` | `[run]` or `[[arm]]` (arm wins) | Removes `CLAUDE*` and `AI_AGENT*` env vars (keeps `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`) and adds `--setting-sources project,local --strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands`, so your hooks, plugins and MCP servers don't enter the measurement |
+| `effort = "medium"` | `[[arm]]` | Passes `--effort medium`; otherwise the effort level is inherited from your settings |
+| `[arm.proxy]` | `[[arm]]` | `command`, `args`, `env`, `listen` (`host:port`), `log` (proxy stdout/stderr), `ready_timeout_secs`. `run` starts it, waits for the port, sets `ANTHROPIC_BASE_URL` to it, and kills it when the arm ends, including on error or Ctrl-C |
+
+### Running a clean comparison against tierline
+
+[`bench.clean.example.toml`](bench.clean.example.toml) defines three clean arms at medium
+effort (all Opus, tierline routing with `TIERLINE_ROUTE=1`, Sonnet alone), each with its own
+tierline proxy and log. Build tierline, copy its `pricing.example.json` and
+`models.example.json` to `pricing.json` / `models.json` here, then:
 
 ```bash
-# in the tierline repo (see its README for pricing.json / models.json)
-TIERLINE_LISTEN=127.0.0.1:8787 TIERLINE_LOG=../agentbench/logs/opus-direct.jsonl    cargo run --release   # pass-through
-TIERLINE_LISTEN=127.0.0.1:8788 TIERLINE_LOG=../agentbench/logs/tierline-off.jsonl   cargo run --release   # pass-through
-TIERLINE_LISTEN=127.0.0.1:8789 TIERLINE_LOG=../agentbench/logs/tierline-route.jsonl TIERLINE_ROUTE=1 cargo run --release
-
-agentbench run --arms opus-direct    --yes
-agentbench run --arms tierline-off   --yes
-agentbench run --arms tierline-route --yes
-agentbench report
+agentbench run --config bench.clean.example.toml --tag hard-v2 --out results/clean.jsonl --yes
+agentbench report --config bench.clean.example.toml --results results/clean.jsonl
 ```
 
-`bench.toml` maps each arm to its port (`ANTHROPIC_BASE_URL`) and log. `opus-direct` pins
-`--model opus`; the other two use Claude Code's default model, so routing has something to
-override. `run` appends to the results file and skips attempts already recorded, so an
-interrupted arm can be resumed.
+Arms run one after another, so the timestamp join described above stays valid. `run`
+appends to the results file and skips attempts already recorded, so an interrupted run
+resumes. Without a `proxy` block you can still start tierline yourself and point the arm's
+`env.ANTHROPIC_BASE_URL` at it, as `bench.toml` does.
 
-`report` also shows Claude's own per-model usage (`modelUsage` from `--output-format json`) next to tierline's, and flags models that only Claude saw (server-side calls such as the advisor). `report` prints a markdown table and writes `report/report.md` and `report/report.svg`
-(success rate with CI whiskers; cost per success).
+`report` prints a markdown table and writes `report/report.md` and `report/report.svg`. It
+also shows Claude's own per-model usage next to tierline's and flags models only Claude saw
+(server-side calls such as the advisor).
 
 ## Results
 

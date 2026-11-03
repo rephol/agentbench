@@ -23,6 +23,8 @@ pub struct RunOpts<'a> {
     pub python: &'a str,
     pub claude_bin: &'a str,
     pub timeout: Duration,
+    /// `run.clean`; an arm's own `clean` overrides it.
+    pub clean: bool,
 }
 
 /// Copies `check.py` into `workdir` and runs it. Exit code 0 means pass.
@@ -67,6 +69,8 @@ pub async fn run_attempt(
         model: arm.model.as_deref(),
         env: &arm.env,
         extra_args: &arm.extra_args,
+        clean: arm.clean.unwrap_or(opts.clean),
+        effort: arm.effort.as_deref(),
         timeout: opts.timeout,
     };
     let start_ms = now_ms();
@@ -100,8 +104,7 @@ pub async fn validate_task(task: &Task, python: &str) -> Result<(bool, bool)> {
         name: "validate".into(),
         model: None,
         env: Default::default(),
-        tierline_log: None,
-        extra_args: Vec::new(),
+        ..Default::default()
     };
     let mut res = [false; 2];
     for (i, agent) in [AgentKind::FakeNoop, AgentKind::FakeSolve]
@@ -113,6 +116,7 @@ pub async fn validate_task(task: &Task, python: &str) -> Result<(bool, bool)> {
             python,
             claude_bin: "claude",
             timeout: Duration::from_secs(10),
+            clean: false,
         };
         res[i] = run_attempt(task, &arm, 0, &opts).await?.pass;
     }

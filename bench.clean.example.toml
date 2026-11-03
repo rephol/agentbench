@@ -1,0 +1,67 @@
+# The setup behind runs/2026-11-03-clean, reproducible without a wrapper script.
+#
+#   agentbench run --config bench.clean.example.toml --tag hard-v2 --out results/clean.jsonl --yes
+#
+# `clean = true` (claude adapter): removes CLAUDE* / AI_AGENT* env vars (keeping
+# CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_CONFIG_DIR, which auth may need) and adds
+#   --setting-sources project,local --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+#   --disable-slash-commands
+# so the user's hooks, plugins and MCP servers don't leak into the measurement.
+# `effort` becomes `--effort <level>`.
+#
+# Each proxy is started before its arm, must accept connections on `listen`, gets
+# ANTHROPIC_BASE_URL pointed at it, and is killed when the arm ends (also on error / Ctrl-C).
+# Run agentbench from the directory holding this file; all paths are relative to it. Build tierline first: cargo build --release in ../tierline.
+# pricing.json / models.json: copy tierline's *.example.json and fill them in.
+
+[run]
+samples = 2
+timeout_secs = 900
+tasks_dir = "tasks"
+python = "python3"
+claude_bin = "claude"
+clean = true
+
+# All traffic to Opus; tierline in pass-through mode only logs cost.
+[[arm]]
+name = "opus"
+model = "opus"
+effort = "medium"
+tierline_log = "logs/opus.jsonl"
+[arm.proxy]
+command = "../tierline/target/release/tierline"
+listen = "127.0.0.1:8811"
+log = "logs/opus.out"
+[arm.proxy.env]
+TIERLINE_LOG = "logs/opus.jsonl"
+TIERLINE_PRICING = "pricing.json"
+
+# Opus requested, tierline routes per request (Haiku / Sonnet / Opus).
+[[arm]]
+name = "route"
+model = "opus"
+effort = "medium"
+tierline_log = "logs/route.jsonl"
+[arm.proxy]
+command = "../tierline/target/release/tierline"
+listen = "127.0.0.1:8812"
+log = "logs/route.out"
+[arm.proxy.env]
+TIERLINE_LOG = "logs/route.jsonl"
+TIERLINE_PRICING = "pricing.json"
+TIERLINE_MODELS = "models.json"
+TIERLINE_ROUTE = "1"
+
+# Sonnet alone.
+[[arm]]
+name = "sonnet"
+model = "sonnet"
+effort = "medium"
+tierline_log = "logs/sonnet.jsonl"
+[arm.proxy]
+command = "../tierline/target/release/tierline"
+listen = "127.0.0.1:8813"
+log = "logs/sonnet.out"
+[arm.proxy.env]
+TIERLINE_LOG = "logs/sonnet.jsonl"
+TIERLINE_PRICING = "pricing.json"

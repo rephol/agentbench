@@ -7,12 +7,13 @@ an agent under different configurations ("arms") and reports **success rate** an
 per successful task** for each arm, with bootstrap confidence intervals.
 
 It was built to measure [tierline](https://github.com/rephol/tierline), a model-routing
-proxy for Claude Code, in three arms: all traffic to Opus, tierline routing off, and
-tierline routing on. Nothing in the harness is tierline-specific except the cost join; any
+proxy for Claude Code, in arms such as: all traffic to Opus, tierline routing on, and a
+single cheaper model. Nothing in the harness is tierline-specific except the cost join; any
 arm that differs by environment variables or `--model` works.
 
-> **Status: harness complete, no real run yet.** The harness and all 15 tasks are tested
-> against a fake agent only. Every result below is **TBD**.
+> **Status: early.** The harness has been run on real models: a pilot on 2026-11-02 and a
+> cleaner run on 2026-11-03 (see [Results](#results)). Both are small, from one machine,
+> on self-written tasks. Treat them as early signal, not proof.
 
 ## The problem
 
@@ -165,51 +166,65 @@ also shows Claude's own per-model usage next to tierline's and flags models only
 
 ## Results
 
-**Pilot results, not a conclusion.** These come from one machine, on 2026-11-02, with tasks
-written for this repo, using Claude Code's headless mode on a Claude subscription. All dollar
-figures are API-equivalent estimates computed from token counts and published API prices.
-Nothing was actually billed at these rates.
+**Small runs, not conclusions.** One machine, tasks written for this repo, Claude Code's
+headless mode (`claude -p`) on a Claude subscription. All dollar figures are API-equivalent
+estimates computed from token counts and published API prices; nothing was billed at these
+rates.
 
-**Effort: low.** The harness didn't pin an effort level, so every arm inherited `low` from
-the local Claude Code settings. The captured request bodies carry
-`output_config: {effort: "low"}` with adaptive thinking. Model comparisons at higher effort
-may differ, and later runs will pin `--effort` per arm.
+### Main result: clean run, 2026-11-03
 
-### Hard set (`hard-v2`: 10 tasks × 2 samples = 20 attempts per arm)
+- **Tasks:** the `hard-v2` set, 10 tasks × 2 samples = 20 attempts per arm.
+- **Config:** clean (no user hooks, plugins or MCP servers; see `clean = true` above), with
+  `--effort medium` pinned on every arm. Reproduce with `bench.clean.example.toml`.
+- **Cost source:** tierline's log, one proxy per arm.
 
-| Arm | Main model | Success rate (95% CI) | Est. cost | Cost per success |
-|---|---|---|---|---|
-| tierline-off | Opus on every request | 90% (18/20), 70–100% | $5.82 | $0.323 |
-| tierline-route | routed per request by [tierline](https://github.com/rephol/tierline) | 90% (18/20), 70–100% | $3.68 | $0.204 |
-| sonnet (advisor configured) | Sonnet | 90% (18/20), 70–100% | $3.12 | $0.174 |
+| Arm | Passed | Est. cost | Cost per success |
+|---|---|---|---|
+| opus (every request on Opus) | 15/20, 75% (95% CI 50–100%) | $4.44 | $0.296 |
+| route ([tierline](https://github.com/rephol/tierline), Opus requested, routed per request) | 18/20, 90% (CI 70–100%) | $2.09 | $0.116 |
+| sonnet (Sonnet alone) | 17/20, 85% (CI 65–100%) | $1.55 | $0.091 |
 
-### Easy set (15 tasks × 1 sample)
+The route arm sent 34 requests to Opus, 29 to Sonnet and 33 to Haiku. Its cost per success
+was about 61% below Opus on every request.
 
-All three arms passed 15/15. The cost per success was $0.205 for tierline-off, $0.139 for
-tierline-route and $0.108 for the Sonnet arm.
+**Read with care:**
 
-### What this does and doesn't show
+- **These arms can't be ranked on quality.** Every confidence interval overlaps. Opus
+  scoring lowest is most likely noise at 20 attempts, not a sign that Opus is worse.
+- **Plain Sonnet was cheapest** at a similar pass rate ($0.091 per success vs $0.116 for
+  routing). The fair reading is "a cheaper model was enough on these tasks", not that
+  routing beat Opus.
+- **Task 16 results use the old prompt.** Task 16 failed in every arm in both runs, which
+  pointed at the task: its check required exact error positions for cases the prompt never
+  specified. It is fixed as of the commit that adds this section, but the numbers above came
+  from the old version.
+- **Claude Code's self-reported cost is wrong for routed traffic.** It prices the model it
+  requested, so all route traffic is priced as Opus. Tierline's log is the cost source for
+  that arm. (Claude-reported cost for route was $7.10, against tierline's $2.09.)
+- **No advisor arm.** `--advisor opus` exists, but Claude never called it unprompted in the
+  pilot, so there's nothing to compare.
+- **Each attempt has one startup request** tierline can't price (the report counts these as
+  cost gaps), so costs are slight lower bounds.
 
-- **The arms didn't differ on quality.** The only failures were task 16, which failed
-  identically in every arm. That suggests a flaw in the task, not in the models; it is under
-  review. With 20 attempts per arm, the intervals can't tell these arms apart.
-- **Cost did differ.** Routing cost about 37% less per success than Opus on every request.
-  Sonnet alone cost about 46% less. On these tasks a cheaper main model lost nothing, so the
-  honest takeaway so far is "Sonnet was enough here", not "routing wins".
-- **Routing behaved sensibly.** tierline sent 71 coding-edit and writing requests to Sonnet
-  and kept all 23 debugging requests on Opus.
-- **The advisor never fired.** The third arm ran Sonnet with `advisorModel: opus` set per
-  invocation, but Claude Code's per-model usage shows no Opus calls. The arm therefore
-  measures Sonnet alone. Whether the advisor wasn't triggered or the setting didn't take
-  effect hasn't been checked yet.
-- **Cost sources disagree.** Costs here come from tierline's log. Claude Code's
-  self-reported cost was about 1.3–1.4× higher on identical token counts, and it reports the
-  model it requested, so in the route arm it prices Sonnet traffic as Opus. Each attempt also
-  includes one startup request tierline can't price. The costs are therefore slight lower
-  bounds.
+### Earlier pilot, 2026-11-02
 
-Next steps: fix or drop task 16, add tasks where Sonnet genuinely fails, add a plain Sonnet
-arm, and make the advisor fire verifiably.
+The same `hard-v2` set, 3 arms × 20 attempts, but not clean: the local user hooks were
+active. They injected about 69 KB per request, against about 3 KB for a clean config, which
+inflated cost and kept Haiku from ever being chosen by the router. Results:
+
+| Arm | Passed | Est. cost | Cost per success |
+|---|---|---|---|
+| tierline-off (Opus) | 18/20 | $5.82 | $0.323 |
+| tierline-route | 18/20 | $3.68 | $0.204 |
+| sonnet (advisor configured, never fired) | 18/20 | $3.12 | $0.174 |
+
+All arms also ran at **low effort**, inherited from local Claude Code settings rather than
+pinned (the request bodies carry `output_config: {effort: "low"}`). Routing cost about 37%
+less per success than Opus there; the only failures were task 16, in every arm. The earlier
+easy set (15 tasks × 1 sample) passed 15/15 in all three arms.
+
+Next steps: re-run with the fixed task 16, add tasks where Sonnet genuinely fails, and make
+an advisor arm fire verifiably.
 
 ## Limitations
 

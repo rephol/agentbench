@@ -25,7 +25,16 @@ Errors raise ParseError (a ValueError) with 1-based `line` and `col`:
 * an unterminated string: the position of its opening quote;
 * an unterminated block comment: the position of its opening `/*`;
 * unexpected end of input: the position just past the last character
-  (an empty or comment-only document is also this error).
+  (an empty or comment-only document is also this error);
+* a raw newline inside a string: the position of that newline;
+* an unknown escape such as `\\q`: the position of the character right after the
+  backslash; a malformed `\\x`/`\\u` (too few or non-hex digits): the position of
+  the character right after the `x`/`u`;
+* a number with a leading zero (`012`, `-012`): the position of the leading `0`
+  (after any sign);
+* a number missing required digits (nothing after `0x`, `e`, `e+`, `-`, or a lone
+  `.`): the position of the first character where a digit was needed, which is
+  the position just past the end of input if the text ends there.
 Columns count characters, not bytes. A CRLF counts as one line break.
 """
 
